@@ -17,9 +17,9 @@ import (
 )
 
 type tConfig struct {
-	Debug                       bool
-	Quiet                       bool
-	Prefix                      string `json:"prefix,omitempty"`
+	Debug                       bool   `json:"-"`
+	Quiet                       bool   `json:"-"`
+	Prefix                      string `json:"-"`
 	IdentityEndpoint            string `json:"endpoint,omitempty"`
 	Username                    string `json:"username,omitempty"`
 	Password                    string `json:"password,omitempty"`
@@ -46,15 +46,28 @@ func init() {
 func main() {
 	var config tConfig
 	var configFile string
+	var createConfig bool
 	flag.BoolVar(&config.Debug, "debug", false, "Enable debug logging")
 	flag.BoolVar(&config.Quiet, "quiet", false, "Only report errors")
 	flag.StringVar(&configFile, "config", "", "")
 	flag.StringVar(&config.Prefix, "prefix", "docker-volume", "")
 	flag.StringVar(&config.MountDir, "mountDir", "", "")
+	flag.BoolVar(&createConfig, "create_config", false, "Create config interactively")
 	flag.Parse()
 
-	if len(configFile) == 0 {
-		configFile = "cinder.json"
+	if configFile == "" {
+		configFile = "./cinder.json"
+	}
+
+	if createConfig {
+		runProgram, err := createConfiguration(&config, configFile)
+		if err != nil {
+			log.Fatal("Failed to write configuration file")
+		}
+		log.Info("Configuration file written successfully")
+		if !runProgram {
+			os.Exit(0)
+		}
 	}
 
 	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
