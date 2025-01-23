@@ -17,9 +17,9 @@ import (
 )
 
 type tConfig struct {
-	Debug                       bool   `json:"-"`
-	Quiet                       bool   `json:"-"`
-	Prefix                      string `json:"-"`
+	Debug                       bool   `json:"debug,omitempty"`
+	Quiet                       bool   `json:"quiet,omitempty"`
+	Prefix                      string `json:"prefix,omitempty"`
 	IdentityEndpoint            string `json:"endpoint,omitempty"`
 	Username                    string `json:"username,omitempty"`
 	Password                    string `json:"password,omitempty"`
@@ -49,10 +49,10 @@ func main() {
 	var createConfig bool
 	flag.BoolVar(&config.Debug, "debug", false, "Enable debug logging")
 	flag.BoolVar(&config.Quiet, "quiet", false, "Only report errors")
-	flag.StringVar(&configFile, "config", "", "")
+	flag.StringVar(&configFile, "config", "", "Path to config file")
 	flag.StringVar(&config.Prefix, "prefix", "docker-volume", "")
 	flag.StringVar(&config.MountDir, "mountDir", "", "")
-	flag.BoolVar(&createConfig, "create_config", false, "Create config interactively")
+	flag.BoolVar(&createConfig, "createConfig", false, "Create config file interactively")
 	flag.Parse()
 
 	if configFile == "" {
@@ -60,14 +60,12 @@ func main() {
 	}
 
 	if createConfig {
-		runProgram, err := createConfiguration(&config, configFile)
+		_, err := createConfiguration(configFile)
 		if err != nil {
-			log.Fatal("Failed to write configuration file")
+			log.Fatalf("Failed to write configuration file: %s", err)
 		}
 		log.Info("Configuration file written successfully")
-		if !runProgram {
-			os.Exit(0)
-		}
+		os.Exit(0)
 	}
 
 	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
@@ -83,7 +81,7 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	if len(config.MountDir) == 0 {
+	if config.MountDir == "" {
 		log.Fatal("No mountDir configured. Abort.")
 	}
 
@@ -97,7 +95,7 @@ func main() {
 
 	log.Debug("Debug logging enabled")
 
-	if len(config.IdentityEndpoint) == 0 {
+	if config.IdentityEndpoint == "" {
 		log.Fatal("Identity endpoint missing")
 	}
 

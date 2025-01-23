@@ -2,15 +2,23 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path"
 
 	"github.com/charmbracelet/huh"
 )
 
-var defaultMountDir string = "/mnt/cinder"
+type setupConfig struct {
+	IdentityEndpoint            string `json:"endpoint"`
+	ApplicationCredentialID     string `json:"applicationCredentialId"`
+	ApplicationCredentialSecret string `json:"applicationCredentialSecret"`
+	Region                      string `json:"region"`
+	MountDir                    string `json:"mountDir"`
+}
 
-func createConfiguration(config *tConfig, path string) (runProgram bool, err error) {
+func createConfiguration(configPath string) (config setupConfig, err error) {
 	credentialInstructions :=
 		`To get an Application Credential ID you must create new Application Credentials
 via the web console (Horizon).
@@ -20,8 +28,26 @@ Press 'Create Application Credential', copy the displayed ID and paste it here.
 
 Do not close the window yet.`
 
-	mountDirInstructions := fmt.Sprintf(`Directory used for mounting cinder volumes
-Leave blank for default: '%s'`, defaultMountDir)
+	mountDirInstructions := `Directory used for mounting cinder volumes
+Leave blank for default`
+
+	var overwriteFile bool = true
+
+	stat, err := os.Stat(configPath)
+	if err == nil {
+		if stat.IsDir() {
+			return setupConfig{}, fmt.Errorf("The configuration file path already is a directory. Delete it or choose a different path to continue.")
+		} else {
+			err = huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().Title("The config file already exists. Overwrite it?").Description(fmt.Sprintf("Path: '%s'", configPath)).Value(&overwriteFile),
+				),
+			).Run()
+		}
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		err = os.MkdirAll(path.Dir(configPath), 0775)
+	}
 
 	err = huh.NewForm(
 		huh.NewGroup(
@@ -35,27 +61,20 @@ Leave blank for default: '%s'`, defaultMountDir)
 		huh.NewGroup(
 			huh.NewInput().Title("Mount Dir").Value(&config.MountDir).Description(mountDirInstructions),
 		),
-		huh.NewGroup(
-			huh.NewConfirm().Title("Run plugin after creating config?").Value(&runProgram),
-		),
 	).Run()
 	if err != nil {
-		return false, err
+		return setupConfig{}, err
 	}
 
-	if config.MountDir == "" {
-		config.MountDir = defaultMountDir
-	}
-
-	err = writeConfiguration(*config, path)
+	err = writeConfigurationFile(config, configPath)
 	if err != nil {
-		return false, err
+		return setupConfig{}, err
 	}
 
-	return runProgram, nil
+	return config, nil
 }
 
-func writeConfiguration(config tConfig, path string) error {
+func writeConfigurationFile(config setupConfig, path string) error {
 	configText, err := json.MarshalIndent(config, "", "    ")
 	if err != nil {
 		return err
