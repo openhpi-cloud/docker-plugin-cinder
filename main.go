@@ -60,11 +60,14 @@ func main() {
 	}
 
 	if createConfig {
-		_, err := createConfiguration(configFile)
-		if err != nil {
+		err := createConfiguration(configFile)
+		if err == nil {
+			log.Info("Configuration file written successfully")
+		} else if err.Error() == "user aborted" {
+			log.Info("Configuration setup aborted")
+		} else {
 			log.Fatalf("Failed to write configuration file: %s", err)
 		}
-		log.Info("Configuration file written successfully")
 		os.Exit(0)
 	}
 

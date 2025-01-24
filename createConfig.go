@@ -11,14 +11,16 @@ import (
 )
 
 type setupConfig struct {
-	IdentityEndpoint            string `json:"endpoint"`
-	ApplicationCredentialID     string `json:"applicationCredentialId"`
-	ApplicationCredentialSecret string `json:"applicationCredentialSecret"`
-	Region                      string `json:"region"`
-	MountDir                    string `json:"mountDir"`
+	IdentityEndpoint            string `json:"endpoint,omitempty"`
+	ApplicationCredentialID     string `json:"applicationCredentialId,omitempty"`
+	ApplicationCredentialSecret string `json:"applicationCredentialSecret,omitempty"`
+	Region                      string `json:"region,omitempty"`
+	MountDir                    string `json:"mountDir,omitempty"`
 }
 
-func createConfiguration(configPath string) (config setupConfig, err error) {
+func createConfiguration(configPath string) error {
+	var config setupConfig
+
 	credentialInstructions :=
 		`To get an Application Credential ID you must create new Application Credentials
 via the web console (Horizon).
@@ -31,21 +33,26 @@ Do not close the window yet.`
 	mountDirInstructions := `Directory used for mounting cinder volumes
 Leave blank for default`
 
-	var overwriteFile bool = true
-
 	stat, err := os.Stat(configPath)
 	if err == nil {
 		if stat.IsDir() {
-			return setupConfig{}, fmt.Errorf("The configuration file path already is a directory. Delete it or choose a different path to continue.")
+			return fmt.Errorf("The configuration file path already is a directory. Delete it or choose a different path to continue.")
 		} else {
+			overwriteFile := false
+
 			err = huh.NewForm(
 				huh.NewGroup(
 					huh.NewConfirm().Title("The config file already exists. Overwrite it?").Description(fmt.Sprintf("Path: '%s'", configPath)).Value(&overwriteFile),
 				),
 			).Run()
+			if err != nil {
+				return err
+			}
+			if !overwriteFile {
+				return fmt.Errorf("user aborted")
+			}
 		}
-	}
-	if errors.Is(err, os.ErrNotExist) {
+	} else if errors.Is(err, os.ErrNotExist) {
 		err = os.MkdirAll(path.Dir(configPath), 0775)
 	}
 
@@ -63,15 +70,10 @@ Leave blank for default`
 		),
 	).Run()
 	if err != nil {
-		return setupConfig{}, err
+		return err
 	}
 
-	err = writeConfigurationFile(config, configPath)
-	if err != nil {
-		return setupConfig{}, err
-	}
-
-	return config, nil
+	return writeConfigurationFile(config, configPath)
 }
 
 func writeConfigurationFile(config setupConfig, path string) error {
