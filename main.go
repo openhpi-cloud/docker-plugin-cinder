@@ -55,11 +55,23 @@ func main() {
 	flag.BoolVar(&createConfig, "createConfig", false, "Create config file interactively")
 	flag.Parse()
 
-	if configFile == "" {
-		configFile = "./cinder.json"
+	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
+	log.SetOutput(os.Stdout)
+
+	if config.Quiet {
+		log.SetLevel(log.ErrorLevel)
+	}
+
+	if config.Debug {
+		log.SetLevel(log.DebugLevel)
+		log.Debug("Debug logging enabled")
 	}
 
 	if createConfig {
+		if configFile == "" {
+			configFile = "/etc/docker/cinder.json"
+		}
+
 		err := createConfiguration(configFile)
 		if err == nil {
 			log.Info("Configuration file written successfully")
@@ -71,8 +83,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
-	log.SetOutput(os.Stdout)
+	if configFile == "" {
+		configFile = "./cinder.json"
+	}
 
 	content, err := os.ReadFile(configFile)
 	if err != nil {
@@ -87,16 +100,6 @@ func main() {
 	if config.MountDir == "" {
 		log.Fatal("No mountDir configured. Abort.")
 	}
-
-	if config.Quiet {
-		log.SetLevel(log.ErrorLevel)
-	}
-
-	if config.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
-
-	log.Debug("Debug logging enabled")
 
 	if config.IdentityEndpoint == "" {
 		log.Fatal("Identity endpoint missing")
