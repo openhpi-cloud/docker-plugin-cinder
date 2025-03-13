@@ -17,8 +17,8 @@ import (
 )
 
 type tConfig struct {
-	Debug                       bool
-	Quiet                       bool
+	Debug                       bool   `json:"debug,omitempty"`
+	Quiet                       bool   `json:"quiet,omitempty"`
 	Prefix                      string `json:"prefix,omitempty"`
 	IdentityEndpoint            string `json:"endpoint,omitempty"`
 	Username                    string `json:"username,omitempty"`
@@ -46,19 +46,46 @@ func init() {
 func main() {
 	var config tConfig
 	var configFile string
+	var createConfig bool
 	flag.BoolVar(&config.Debug, "debug", false, "Enable debug logging")
 	flag.BoolVar(&config.Quiet, "quiet", false, "Only report errors")
-	flag.StringVar(&configFile, "config", "", "")
+	flag.StringVar(&configFile, "config", "", "Path to config file")
 	flag.StringVar(&config.Prefix, "prefix", "docker-volume", "")
 	flag.StringVar(&config.MountDir, "mountDir", "", "")
+	flag.BoolVar(&createConfig, "createConfig", false, "Create config file interactively")
 	flag.Parse()
-
-	if len(configFile) == 0 {
-		configFile = "cinder.json"
-	}
 
 	log.SetFormatter(&log.TextFormatter{DisableTimestamp: true})
 	log.SetOutput(os.Stdout)
+
+	if config.Quiet {
+		log.SetLevel(log.ErrorLevel)
+	}
+
+	if config.Debug {
+		log.SetLevel(log.DebugLevel)
+		log.Debug("Debug logging enabled")
+	}
+
+	if createConfig {
+		if configFile == "" {
+			configFile = "/etc/docker/cinder.json"
+		}
+
+		err := createConfiguration(configFile)
+		if err == nil {
+			log.Info("Configuration file written successfully")
+		} else if err.Error() == "user aborted" {
+			log.Info("Configuration setup aborted")
+		} else {
+			log.Fatalf("Failed to write configuration file: %s", err)
+		}
+		os.Exit(0)
+	}
+
+	if configFile == "" {
+		configFile = "./cinder.json"
+	}
 
 	content, err := os.ReadFile(configFile)
 	if err != nil {
@@ -70,21 +97,11 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	if len(config.MountDir) == 0 {
+	if config.MountDir == "" {
 		log.Fatal("No mountDir configured. Abort.")
 	}
 
-	if config.Quiet {
-		log.SetLevel(log.ErrorLevel)
-	}
-
-	if config.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
-
-	log.Debug("Debug logging enabled")
-
-	if len(config.IdentityEndpoint) == 0 {
+	if config.IdentityEndpoint == "" {
 		log.Fatal("Identity endpoint missing")
 	}
 
