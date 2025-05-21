@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -89,6 +90,7 @@ func (d plugin) Create(r *volume.CreateRequest) error {
 
 	// DEFAULT SIZE IN GB
 	var size = 10
+	var filesystem = "ext4"
 	var err error
 
 	if s, ok := r.Options["size"]; ok {
@@ -99,6 +101,15 @@ func (d plugin) Create(r *volume.CreateRequest) error {
 		}
 	}
 
+	if f, ok := r.Options["type"]; ok {
+		f = strings.ToLower(f)
+		if !slices.Contains(filesystems, f) {
+			logger.WithError(err).Error("Error parsing filesystem type option")
+			return fmt.Errorf("Invalid filesystem option: %s", f)
+		}
+		filesystem = f
+	}
+
 	vol, err := volumes.Create(ctx, d.blockClient, volumes.CreateOpts{
 		Size: size,
 		Name: r.Name,
@@ -106,6 +117,35 @@ func (d plugin) Create(r *volume.CreateRequest) error {
 
 	if err != nil {
 		logger.WithError(err).Errorf("Error creating volume: %s", err.Error())
+		return err
+	}
+
+	//
+	// Attaching block volume to compute instance
+
+	opts := volumeattach.CreateOpts{VolumeID: vol.ID}
+	_, err = volumeattach.Create(ctx, d.computeClient, d.config.MachineID, opts).Extract()
+
+	if err != nil {
+		logger.WithError(err).Errorf("Error attaching volume: %s", err.Error())
+		return err
+	}
+
+	//
+	// Waiting for device appearance
+
+	dev, err := findDeviceWithTimeout(vol.ID)
+
+	if err != nil {
+		logger.WithError(err).Error("Block device not found")
+		return err
+	}
+
+	logger.WithField("dev", dev).Debug("Found device")
+
+	logger.Debug("Volume is empty, formatting")
+	if err := formatFilesystem(dev, r.Name, filesystem); err != nil {
+		logger.WithError(err).Error("Formatting failed")
 		return err
 	}
 
@@ -253,7 +293,7 @@ func (d plugin) Mount(r *volume.MountRequest) (*volume.MountResponse, error) {
 
 	if fsType == "" {
 		logger.Debug("Volume is empty, formatting")
-		if err := formatFilesystem(dev, r.Name); err != nil {
+		if err := formatFilesystem(dev, r.Name, "ext4"); err != nil {
 			logger.WithError(err).Error("Formatting failed")
 			return nil, err
 		}

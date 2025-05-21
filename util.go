@@ -5,8 +5,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"time"
 )
+
+var filesystems []string = []string{
+	"btrfs",
+	"ext2",
+	"ext3",
+	"ext4",
+	"fat",
+	"fat32",
+	"ntfs",
+	"xfs",
+}
 
 func getFilesystemType(dev string) (string, error) {
 	out, err := exec.Command("blkid", "-s", "TYPE", "-o", "value", dev).CombinedOutput()
@@ -22,9 +34,13 @@ func getFilesystemType(dev string) (string, error) {
 	return string(out), nil
 }
 
-func formatFilesystem(dev string, label string) error {
-	out, err := exec.Command("mkfs.ext4", "-L", label, dev).CombinedOutput()
+func formatFilesystem(dev, label, filesystem string) error {
+	_, err := exec.LookPath("mkfs." + filesystem)
+	if err != nil || !slices.Contains(filesystems, filesystem) {
+		return errors.New(fmt.Sprintf("filesystem '%s' does not exist", filesystem))
+	}
 
+	out, err := exec.Command(fmt.Sprintf("mkfs.%s", filesystem), "-L", label, dev).CombinedOutput()
 	if err != nil {
 		return errors.New(string(out))
 	}
